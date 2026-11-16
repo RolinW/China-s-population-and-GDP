@@ -95,9 +95,11 @@
   var projection = null, geoPath = null, GEO = null;
   var mapW = 0, mapH = 0;
 
-  var zoom = null;
-  var wheelAcc = 0;
-  var ZOOM_STEP = 1.32;
+    var zoom = null;
+    var wheelAcc = 0;
+    var mapClickTimer = null;
+    var treeClickTimer = null;
+    var ZOOM_STEP = 1.32;
 
   var CODE_KEY = { province: '省代码', city: '市代码', county: '县代码' };
 
@@ -145,10 +147,32 @@
         .attr('class', 'unit')
         .attr('d', geoPath)
         .attr('data-code', function (f) { return String(f.properties[CODE_KEY[lv]]); })
-        .on('dblclick', function (event, f) {
-          event.stopPropagation();
-          pickUnit(lv, f);
-        })
+          .on('click', function (event, f) {
+              event.stopPropagation();
+
+              if (mapClickTimer) clearTimeout(mapClickTimer);
+
+              mapClickTimer = setTimeout(function () {
+                  mapClickTimer = null;
+
+                  if (!state.animating && !state.dragging) {
+                      showUnitDetail(lv, f);
+                  }
+              }, 250);
+          })
+
+          .on('dblclick', function (event, f) {
+              event.preventDefault();
+              event.stopPropagation();
+
+              if (mapClickTimer) {
+                  clearTimeout(mapClickTimer);
+                  mapClickTimer = null;
+              }
+
+              pickUnit(lv, f);
+          })
+
         .on('contextmenu', function (event, f) {
           event.preventDefault();
           event.stopPropagation();
@@ -359,13 +383,35 @@
     return null;
   }
 
-  function pickUnit(lv, f) {
-    var r = resolveNode(lv, f);
-    if (!r) return;
-    if (r.kind === 'nodata') { selectNode({ name: r.name, level: 'nodata', code: String(f.properties[CODE_KEY[lv]]) }); return; }
-    if (r.kind === 'agg') { selectNode(r.node); return; }
-    selectNode(r.node);
-  }
+    function showUnitDetail(lv, f) {
+        var r = resolveNode(lv, f);
+        if (!r) return;
+
+        if (r.kind === 'nodata') {
+            selectNode({
+                name: r.name,
+                level: 'nodata',
+                code: String(f.properties[CODE_KEY[lv]])
+            });
+            return;
+        }
+
+        selectNode(r.node);
+    }
+    function pickUnit(lv, f) {
+        var r = resolveNode(lv, f);
+        if (!r) return;
+
+        if (r.kind === 'nodata') {
+            selectNode({
+                name: r.name,
+                level: 'nodata',
+                code: String(f.properties[CODE_KEY[lv]])
+            });
+            return;
+        }
+        goTree(r.node);
+    }
 
   function showMapTip(lv, f, x, y) {
     var p = f.properties;
@@ -459,25 +505,49 @@
 
     var all = enter.merge(sel);
 
-    all.style('cursor', 'pointer')
-      .on('click', function (event, d) {
-        event.stopPropagation();
-        if (d.data.children && d.data.children.length) {
-          state.focus = d.data;
-          renderTree(true);
-          selectNode(d.data);
-        } else {
-          selectNode(d.data);
-        }
-      })
-      .on('mousemove', function (event, d) {
-        var aux = state.metric === 'gdp'
-          ? { label: '人口', v: d.data.pop, text: fmtPop(d.data.pop) }
-          : { label: 'GDP', v: d.data.gdp, text: fmtGdp(d.data.gdp) };
-        var html = '<b>' + d.data.name + '</b><br>' + aux.label + ' ' + aux.text;
-        showTip(html, event.clientX, event.clientY);
-      })
-      .on('mouseleave', hideTip);
+
+
+      all.style('cursor', 'pointer')
+          .on('click', function (event, d) {
+              event.stopPropagation();
+
+              // 延迟执行单击，给双击事件留出识别时间
+              if (treeClickTimer) clearTimeout(treeClickTimer);
+
+              treeClickTimer = setTimeout(function () {
+                  treeClickTimer = null;
+
+                  if (d.data.children && d.data.children.length) {
+                      state.focus = d.data;
+                      renderTree(true);
+                      selectNode(d.data);
+                  } else {
+                      selectNode(d.data);
+                  }
+              }, 250);
+          })
+          .on('dblclick', function (event, d) {
+              event.preventDefault();
+              event.stopPropagation();
+
+
+              if (treeClickTimer) {
+                  clearTimeout(treeClickTimer);
+                  treeClickTimer = null;
+              }
+
+              goMap(d.data);
+          })
+          .on('mousemove', function (event, d) {
+              var aux = state.metric === 'gdp'
+                  ? { label: '人口', v: d.data.pop, text: fmtPop(d.data.pop) }
+                  : { label: 'GDP', v: d.data.gdp, text: fmtGdp(d.data.gdp) };
+              var html = '<b>' + d.data.name + '</b><br>' + aux.label + ' ' + aux.text;
+              showTip(html, event.clientX, event.clientY);
+          })
+          .on('mouseleave', hideTip);
+          
+
 
     all.select('rect')
       .transition().duration(dur).ease(d3.easeCubicInOut)
@@ -641,6 +711,93 @@
     selectNode(node);
   }
 
+    function goMap(node) {
+        if (!node) return;
+
+        var mapLevel = node.level === 'province' ? 'province'
+            : node.level === 'city' ? 'city'
+                : 'county';
+
+        state.level = mapLevel;
+
+        switchView('map');
+        selectNode(node);
+
+        if (!svgMap || !zoom || !GEO) return;
+
+        var features = [];
+
+        if (node.level === 'province') {
+            features = GEO.province.features.filter(function (f) {
+                return String(f.properties['省代码']) === String(node.code);
+            });
+        } else if (node.level === 'city') {
+            features = GEO.city.features.filter(function (f) {
+                return String(f.properties['市代码']) === String(node.code);
+            });
+        } else if (node.level === 'county' || node.level === 'district') {
+            features = GEO.county.features.filter(function (f) {
+                return String(f.properties['县代码']) === String(node.code);
+            });
+        } else if (node.level === 'residual') {
+            features = GEO.county.features.filter(function (f) {
+                var countyCode = String(f.properties['县代码']);
+                return String(f.properties['市代码']) === String(node.code)
+                    && !byCode[countyCode];
+            });
+        }
+
+        if (!features.length) {
+            console.warn('未找到对应地图区域：', node.name, node.code);
+            return;
+        }
+
+        var bounds = [[Infinity, Infinity], [-Infinity, -Infinity]];
+
+        features.forEach(function (f) {
+            var b = geoPath.bounds(f);
+            bounds[0][0] = Math.min(bounds[0][0], b[0][0]);
+            bounds[0][1] = Math.min(bounds[0][1], b[0][1]);
+            bounds[1][0] = Math.max(bounds[1][0], b[1][0]);
+            bounds[1][1] = Math.max(bounds[1][1], b[1][1]);
+        });
+
+        var width = bounds[1][0] - bounds[0][0];
+        var height = bounds[1][1] - bounds[0][1];
+
+        if (width <= 0 || height <= 0) return;
+
+        var centerX = (bounds[0][0] + bounds[1][0]) / 2;
+        var centerY = (bounds[0][1] + bounds[1][1]) / 2;
+
+
+        var k = Math.min(
+            (mapW - 100) / width,
+            (mapH - 100) / height
+        );
+
+        if (node.level === 'province') {
+            k = Math.max(1, Math.min(1.8, k));
+        } else if (node.level === 'city') {
+            k = Math.max(2.1, Math.min(6.4, k));
+        } else {
+            k = Math.max(6.6, Math.min(44, k));
+        }
+
+        var x = mapW / 2 - centerX * k;
+        var y = mapH / 2 - centerY * k;
+
+        state.animating = true;
+        hideTip();
+
+        svgMap.transition('locate')
+            .duration(650)
+            .ease(d3.easeCubicOut)
+            .call(
+                zoom.transform,
+                d3.zoomIdentity.translate(x, y).scale(k)
+            );
+    }
   /* ================================================================ 视图切换 */
   function setSwitch(group, value) {
     var sel = group === 'view' ? '#viewSwitch button' : '#metricSwitch button';

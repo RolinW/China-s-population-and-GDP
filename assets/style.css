@@ -121,7 +121,10 @@ main {
 
 .layer { transition: opacity .3s ease; }
 
-.unit.sel { stroke: #111; }
+path.sel {
+    stroke: #111 !important;
+    stroke-opacity: 1 !important;
+}
 .unit.no-data { fill: var(--no-data); }
 
 #mapView svg { cursor: grab; }
