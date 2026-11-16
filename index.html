@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>中国县域经济地图 · 2022</title>
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand">
+    <h1>中国县域经济地图</h1>
+    <p>2022 年 · 省 / 市 / 县三级 · 数据：县域统计年鉴 + 城市统计年鉴</p>
+  </div>
+  <div class="switches">
+    <div class="seg" id="metricSwitch" role="tablist" aria-label="指标">
+      <button type="button" data-metric="pop">人口</button>
+      <button type="button" data-metric="gdp" class="on">GDP</button>
+    </div>
+    <div class="seg" id="viewSwitch" role="tablist" aria-label="视图">
+      <button type="button" data-view="map" class="on">地图</button>
+      <button type="button" data-view="tree">树形图</button>
+    </div>
+  </div>
+</header>
+
+<main>
+  <section class="stage" id="stage">
+    <div class="view" id="mapView"></div>
+    <div class="view is-hidden" id="treeView"></div>
+    <div class="levelTip" id="levelTip">当前层级：省</div>
+    <nav class="crumb" id="crumb" hidden></nav>
+    <div class="legend" id="legend"></div>
+    <div class="hint" id="hint">滚轮缩放 · 左键拖动 · 双击选中 · 右键菜单</div>
+  </section>
+
+  <aside class="side">
+    <div class="panel" id="detail">
+      <h2>选中单位</h2>
+      <p class="muted">在地图上双击一个单位，或在树形图中点击叶子节点。</p>
+    </div>
+    <div class="panel note">
+      <h2>口径说明</h2>
+      <p>颜色按<b>当前层级聚合值</b>映射（省 / 市 / 县各自一套 256 档色标），平方根曲线。</p>
+      <p>县域统计不含多数市辖区；城市与省级使用城市统计年鉴的全市口径，树形图中各市的市辖区合并为「XX市市辖区」一个单位，详情里列出包含的区。</p>
+      <p>人口为<b>户籍人口</b>口径。</p>
+    </div>
+  </aside>
+</main>
+
+<div class="ctx" id="ctx" hidden></div>
+<div class="tip" id="tip" hidden></div>
+
+<script src="vendor/d3.min.js"></script>
+<script src="vendor/topojson-client.min.js"></script>
+<script src="data/processed/tree.js"></script>
+<script src="data/processed/scales.js"></script>
+<script src="data/processed/topo-province.js"></script>
+<script src="data/processed/topo-city.js"></script>
+<script src="data/processed/topo-county.js"></script>
+<script src="assets/app.js"></script>
+</body>
+</html>
